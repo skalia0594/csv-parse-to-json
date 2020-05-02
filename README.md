@@ -1,0 +1,1 @@
+This is a software assessment program which reads the csv data from number of files, compute it and create the json output file as required for front end development.
