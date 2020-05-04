@@ -1,0 +1,29 @@
+{
+  "name": "csv-to-json",
+  "version": "1.0.0",
+  "description": "This is a software assessment program which reads the csv data from number of files, compute it and create the json output file as required for front end development.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node app.js",
+    "dev": "node app.js /Users/shubhamkalia/Downloads/Example1/courses.csv  /Users/shubhamkalia/Downloads/Example1/students.csv /Users/shubhamkalia/Downloads/Example1/tests.csv /Users/shubhamkalia/Downloads/Example1/marks.csv /Users/shubhamkalia/Downloads/Example1/output1.json"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/skalia0594/csv-parse-to-json.git"
+  },
+  "keywords": [
+    "csv",
+    "nodejs",
+    "json"
+  ],
+  "author": "Shubham Kalia",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/skalia0594/csv-parse-to-json/issues"
+  },
+  "homepage": "https://github.com/skalia0594/csv-parse-to-json#readme",
+  "dependencies": {
+    "csvtojson": "^2.0.10"
+  }
+}
