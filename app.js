@@ -1,164 +1,103 @@
 const csv = require('csvtojson');
 const fs = require('fs');
 const arguments = process.argv.slice(2);
-// console.log(arguments); 
 
+// main method
+const processData = async () => {
+    try {
+        const testsData = await getData(arguments[2]);
+        const validate = (testsData!==null || typeof testsData !== "undefined") ? await validateTestsDataFile(testsData): false;
+        if(!validate) return;
+        // marks data
+        const marksData = await getData(arguments[3]);
+        const marksDataProcess = await processMarksData(marksData, testsData);
+        // student data
+        const [studentInfos, coursesPerStudents ] = await getStudentsAndCourses(marksDataProcess);
+        // final jsonobject
+        const data = await getJsonObject(studentInfos, coursesPerStudents);
+        await writeData(JSON.stringify({"students":data}, null, 4));        
+    } catch (error) {
+        console.error(error);
+    }    
+}
 const getData = async (filePath) => {
     return await csv().fromFile(filePath);
 }
-
-const validateTestsDataFile = async () => {
+const validateTestsDataFile = async (testsData) => {
     try {
-        const tests = await getData(arguments[2]);
-        const testArray = tests.reduce((obj, current) => {
-            const courseId = current.course_id;
-            return{
-                ...obj,
-                [courseId] :  (obj[courseId]|| 0) + Number(current.weight)
+        const courseIds= {};
+        for(let i=0; i< testsData.length; i++) {
+            const courseId = testsData[i]["course_id"];
+            if(!courseIds[courseId]) {
+                courseIds[courseId] = Number(testsData[i]["weight"]);
             }
-        }, []);
-        const entries = Object.entries(testArray);
+            else{
+                courseIds[courseId] += Number(testsData[i]["weight"]);
+                if(courseIds[courseId] > 100) throw new Error(`Sum can not be more than 100 for id = ${courseId}`);
+            }
+        }
+        const entries = Object.entries(courseIds);
         for(const [id ,val] of entries){
             if (val !== 100) throw new Error(`The sum of all the weights of course id = ${id} should add up to 100 in test.csv file.`)
         }
-        // console.log(testArray);
         return true;
     } catch (error) {
         console.error(error);
         return false;
-    }
-    
+    }   
 }
-
-const processData = async () => {
-    try {
-        const validate = await validateTestsDataFile();
-        if(!validate) return;
-        
-        const merge = (prev, next) => Object.assign({},prev, next);
-
-
-        const tests = await getData(arguments[2]);
-        const getCourse = (testid) => {
-            const testsArray = tests.reduce((obj, current) => {
-                const testId = current.id;
-                return{
-                    ...obj,
-                    [testId] : current.course_id
-                }
-            }, []);
-
-            // console.log(testsArray);
-            return testsArray[testid];
+const processMarksData = (marksData, testsData) => {
+    return marksData.reduce((obj, current) => {
+        const studentId = current.student_id;
+        const mark = current.mark !== "" ? current.mark : 0;
+        const getCourseFromTestsData = testsData.filter(test => test["id"] === current.test_id)[0];
+        const courseId = getCourseFromTestsData["course_id"];
+        const weight = getCourseFromTestsData["weight"];
+        const weightedMark= Number((mark * (weight / 100)).toFixed(2));
+        return{
+            ...obj,
+            [studentId] :  [...(obj[studentId]|| []), {'student_id': studentId,'course_id':courseId,'weightedMark':weightedMark} ]
         }
-
-        const getWeight = (testid) => {
-            const testsArray = tests.reduce((obj, current) => {
-                const testId = current.id;
-                return{
-                    ...obj,
-                    [testId] : current.weight
-                }
-            }, []);
-
-            // console.log(testsArray);
-            return testsArray[testid];
-        }
-        // console.log(getWeight('1'));
-        const weightedMark = (mark, weight) => {
-            return (mark * (weight / 100)).toFixed(2) ; 
-        }
-        // console.log(weightedMark('78', getWeight('1') ));
-        
-        
-        const marks = await getData(arguments[3]);
-        
-        const marksArray = marks.reduce((obj, current) => {
-            const studentId = current.student_id;
-            return{
-                ...obj,
-                [studentId] :  [...(obj[studentId]|| []), {'student_id': current.student_id,'course_id':getCourse(current.test_id),'weightedMark':weightedMark(current.mark, getWeight(current.test_id))} ]
-            }
-        }, {});
-
-       
-        // console.log(marksArray);
-
-        
-        const studentIds = Object.keys(marksArray);
-        const studentsData = await getData(arguments[1]);
-        const getstudentInfo = (inpt) => {
-            let info;
-            for(let i = 0; i< studentsData.length; i++){
-                if (studentsData[i].id === inpt){
-                    info = studentsData[i];
-                    break;
-                } 
-            }
-            return info;
-        }
-        const studentInfos = studentIds.map(id => {
-            const info = getstudentInfo(id);
-            return{
-                "id":Number(info.id),
-                "name":info.name
-            }
-        });
-        // console.log(studentInfos);
-
-        const coursesData = await getData(arguments[0]);
-        const courseInfo = (inpt) => {
-            let course;
-            for(let i = 0; i< coursesData.length; i++){
-                if (coursesData[i].id === inpt){
-                    course = coursesData[i];
-                    break;
-                } 
-            }
-            return course;
-        }
-        // console.log(courseInfo('1'));
-        const students = Object.values(marksArray);
-        let coursesPerStudents=[];
-        for(let i=0 ; i<students.length; i++){
-            let courses = [];
-            students[i].reduce(function(acc, obj) {
-            if (!acc[obj.course_id]) {
-                const course = courseInfo(obj.course_id);
-                acc[obj.course_id] = { 'id': Number(course.id), 'name': course.name, 'teacher':course.teacher , 'courseAverage': 0};
-                courses=[...courses, acc[obj.course_id] ]
-            }
-            acc[obj.course_id].courseAverage +=  Number(obj.weightedMark);
-            return acc;
-            }, []);
-            // coursesPerStudents=[...coursesPerStudents, [courses]];
-            coursesPerStudents.push(courses);
-        }
-        console.log(coursesPerStudents);
-        
-        let fullJsonString='{\n  "students": [\n';
-        for(let i =0; i<studentInfos.length;i++ ){
-            const studentInfoObject = studentInfos[i];
-            let totalAverage = coursesPerStudents[i].reduce((acc, obj) => (acc + obj.courseAverage),0)/coursesPerStudents[i].length;
-            totalAverage = (Number(totalAverage.toFixed(2)));
-            const coursesObject = {'courses':coursesPerStudents[i]};
-            const addObject = merge(studentInfoObject,{totalAverage});
-            const fullObject = merge(addObject,coursesObject);
-            const jsonString = JSON.stringify(fullObject,null,4);   
-            fullJsonString = fullJsonString.concat(jsonString,',\n');
-            
-        }
-        fullJsonString = fullJsonString.substring(0, fullJsonString.length-2);
-        fullJsonString = fullJsonString.concat('\n]\n}');
-        // console.log(fullJsonString);
-        await writeData(fullJsonString);
-            
-    } catch (error) {
-        console.error(error);
-    }
-    
+    }, {});
 }
-
+const getStudentsAndCourses = async (marksDataProcess) => {
+    const coursesData = await getData(arguments[0]);
+    const getCourseInfo = (inp) => coursesData.filter(course => course["id"] === inp)[0];  
+    
+    const studentsData = await getData(arguments[1]);
+    const studentIds = Object.keys(marksDataProcess);
+    const studentInfos = studentIds.map(id =>  studentsData.filter(student => student["id"] === id)[0]);
+    const students = Object.values(marksDataProcess);
+    let coursesPerStudents=[];
+    for(let i=0 ; i<students.length; i++){
+        let courses = [];
+        students[i].reduce(function(acc, obj) {
+        if (!acc[obj.course_id]) {
+            const course = getCourseInfo(obj.course_id);
+            acc[obj.course_id] = { 'id': Number(course.id), 'name': course.name, 'teacher':course.teacher , 'courseAverage': 0};
+            courses=[...courses, acc[obj.course_id] ]
+        }
+        acc[obj.course_id].courseAverage = Number((acc[obj.course_id].courseAverage + obj.weightedMark).toFixed(2));
+        return acc;
+        }, []);
+        coursesPerStudents.push(courses);
+    }
+    return [studentInfos, coursesPerStudents];
+}
+const getJsonObject = async (studentInfos, coursesPerStudents) => {
+    let data = [];
+    const merge = (prev, next) => Object.assign({},prev, next);
+    for(let i =0; i<studentInfos.length;i++ ){
+        const studentInfo = studentInfos[i];
+        let totalAverage = coursesPerStudents[i].reduce((acc, obj) => (acc + obj.courseAverage),0)/coursesPerStudents[i].length;
+        totalAverage = (Number(totalAverage.toFixed(2)));
+        const courses = coursesPerStudents[i];
+        const addObject = merge(studentInfo,{totalAverage});
+        const fullObject = merge(addObject,{courses});
+        data = [...data , fullObject];
+    }
+    return data;
+} 
 const writeData = async (jsonString) => {
     await fs.writeFile(arguments[4], jsonString, (err) => {
         if (err) {
@@ -171,3 +110,5 @@ const writeData = async (jsonString) => {
 
 
 processData();
+
+
